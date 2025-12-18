@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cambridge Walking Routes</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .form-section {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 250px;
+        }
+        button {
+            padding: 10px 24px;
+            font-size: 16px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            height: 42px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .loading {
+            background: #fef3c7 !important;
+            color: #d97706 !important;
+            border: 1px solid #f59e0b;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            border-radius: 8px;
+        }
+        .loading-overlay .spinner-large {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2563eb;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        #map-container {
+            position: relative;
+        }
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .success {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Check if user is authenticated
+        function getCookie(name) {
+            const value = document.cookie;
+            const parts = value.split('; ');
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i].split('=');
+                if (part[0] === name) {
+                    return part[1];
+                }
+            }
+            return null;
+        }
+        
+        if (getCookie('authenticated') !== 'true') {
+            window.location.href = '/';
+        }
+    </script>
+    <div class="container">
+        <h1>Cambridge Mapper</h1>
+        
+        <div class="form-section">
+            <div class="form-group">
+                <label for="start">Starting Location</label>
+                <input type="text" id="start" placeholder="e.g. Cambridge Train Station">
+            </div>
+            
+            <div class="form-group">
+                <label for="destination">Destination</label>
+                <input type="text" id="destination" placeholder="e.g. King's College Cambridge">
+            </div>
+
+            <button id="searchBtn" onclick="findRoute()">Find Route</button>
+        </div>
+
+        <div id="status"></div>
+        <div id="map-container">
+            <div id="map"></div>
+            <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                <div class="spinner-large"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map centered on Cambridge
+        const map = L.map('map').setView([52.2053, 0.1218], 13);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Store current route layer so we can remove it later
+        let routeLayer = null;
+        let markersLayer = null;
+
+        async function findRoute() {
+            const original = document.getElementById('start').value;
+            const destination = document.getElementById('destination').value;
+            const statusDiv = document.getElementById('status');
+            const btn = document.getElementById('searchBtn');
+
+            if (!original || !destination) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = 'Please fill in both locations';
+                return;
+            }
+
+            // Show loading state
+            const loadingOverlay = document.getElementById('loading-overlay');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Finding route...';
+            statusDiv.className = 'loading';
+            statusDiv.textContent = '🔍 Searching for route... This may take a moment.';
+            loadingOverlay.style.display = 'flex';
+
+            try {
+                const response = await fetch('/api/geocode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ original, destination })
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    statusDiv.className = 'error';
+                    statusDiv.textContent = data.error;
+                    return;
+                }
+
+                // Clear previous route and markers
+                if (routeLayer) {
+                    map.removeLayer(routeLayer);
+                }
+                if (markersLayer) {
+                    map.removeLayer(markersLayer);
+                }
+
+                // Check if we got a route
+                if (!data.route || data.route.length === 0) {
+                    statusDiv.className = 'error';
+                    statusDiv.textContent = 'No walking route found between these locations';
+                    return;
+                }
+
+                // Convert route to Leaflet format so that it can run the map properly [lat, lng]
+                const routeCoords = data.route.map(p => [p.lat, p.lng]);
+
+                // Draw the route
+                routeLayer = L.polyline(routeCoords, {
+                    color: '#2563eb',
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(map);
+
+                // Add markers for start and end
+                markersLayer = L.layerGroup([
+                    L.marker([data.original.lat, data.original.lng])
+                        .bindPopup('Start: ' + original),
+                    L.marker([data.destination.lat, data.destination.lng])
+                        .bindPopup('End: ' + destination)
+                ]).addTo(map);
+
+                // Fit map to show entire route
+                map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+                statusDiv.className = 'success';
+                statusDiv.textContent = `Route found! ( For Computer Scientists: It's ${data.route.length - 1} edges to get there! )`;
+
+            } catch (error) {
+                console.error('Error:', error);
+                statusDiv.className = 'error';
+                statusDiv.textContent = 'Error: ' + error.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Find Route';
+                loadingOverlay.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

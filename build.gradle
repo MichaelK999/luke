@@ -1,0 +1,40 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.6'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.cambridge'
+version = '0.0.1-SNAPSHOT'
+description = 'cambridge'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+repositories {
+	mavenCentral()
+	maven { url 'https://mvn.topobyte.de' }
+	maven { url 'https://mvn.slimjars.com' }
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+	implementation 'org.xerial:sqlite-jdbc:3.44.1.0'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	implementation 'de.topobyte:osm4j-core:1.3.0'
+	implementation 'de.topobyte:osm4j-pbf:1.3.0'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	maxHeapSize = '4G'
+}
+
+bootRun {
+	jvmArgs = ["-Xmx4g"]
+}
