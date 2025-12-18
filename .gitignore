@@ -4,6 +4,12 @@
 .Spotlight-V100
 .Trashes
 
+# VS Code
+.vscode/
+
+# Build output
+bin/
+
 # Windows
 Thumbs.db
 desktop.ini
