@@ -84,7 +84,24 @@ public class MapParser implements OsmHandler {
 
     @Override
     public void handle(OsmWay way) {
-        // Build edges from way (no filtering - process all ways)
+        // Check for wheelchair accessibility
+        boolean isAccessible = true; // Default to accessible if no tag
+        
+        for (int i = 0; i < way.getNumberOfTags(); i++) {
+            String key = way.getTag(i).getKey();
+            String value = way.getTag(i).getValue();
+            
+            if (key.equals("wheelchair")) {
+                if (value.equals("yes") || value.equals("limited")) {
+                    isAccessible = true;
+                } else if (value.equals("no")) {
+                    isAccessible = false;
+                }
+                break; // Found wheelchair tag, no need to continue
+            }
+        }
+        
+        // Build edges from way
         int numberOfNodes = way.getNumberOfNodes();
         if (numberOfNodes < 2) return;
 
@@ -98,8 +115,8 @@ public class MapParser implements OsmHandler {
             
             if (fromNode != null && toNode != null) {
                 double distance = calculateDistance(fromNode, toNode);
-                adjacencyList.computeIfAbsent(fromId, k -> new ArrayList<>()).add(new Edge(toId, distance));
-                adjacencyList.computeIfAbsent(toId, k -> new ArrayList<>()).add(new Edge(fromId, distance));
+                adjacencyList.computeIfAbsent(fromId, k -> new ArrayList<>()).add(new Edge(toId, distance, isAccessible));
+                adjacencyList.computeIfAbsent(toId, k -> new ArrayList<>()).add(new Edge(fromId, distance, isAccessible));
             }
         }
     }
@@ -138,10 +155,12 @@ public class MapParser implements OsmHandler {
     public static class Edge {
         public long targetNodeId;
         public double distance; // in meters
+        public boolean isAccessible; // wheelchair accessible
 
-        public Edge(long targetNodeId, double distance) {
+        public Edge(long targetNodeId, double distance, boolean isAccessible) {
             this.targetNodeId = targetNodeId;
             this.distance = distance;
+            this.isAccessible = isAccessible;
         }
     }
 }

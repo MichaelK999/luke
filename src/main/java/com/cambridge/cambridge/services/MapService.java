@@ -18,7 +18,7 @@ public class MapService {
         this.mapParser = mapParser;
     }
 
-    public List<double[]> calculateRoute(double originLat, double originLng, double destLat, double destLng) {
+    public List<double[]> calculateRoute(double originLat, double originLng, double destLat, double destLng, boolean requireAccessible) {
         // 1. Find the nearest OSM nodes to the start and end points
         Long startNodeId = mapParser.findNearestNode(originLat, originLng);
         Long endNodeId = mapParser.findNearestNode(destLat, destLng);
@@ -44,9 +44,10 @@ public class MapService {
 
         // 2. Run Dijkstra
         System.out.println("--- Running Dijkstra ---");
+        System.out.println("  Accessibility mode: " + (requireAccessible ? "ON (only accessible paths)" : "OFF (all paths)"));
         long startTime = System.currentTimeMillis();
         
-        List<Long> path = dijkstra(startNodeId, endNodeId);
+        List<Long> path = dijkstra(startNodeId, endNodeId, requireAccessible);
         
         long endTime = System.currentTimeMillis();
         System.out.println("Dijkstra completed in " + (endTime - startTime) + "ms");
@@ -72,7 +73,7 @@ public class MapService {
     }
     
     // Dijkstra implementation
-    private List<Long> dijkstra(Long startNodeId, Long endNodeId) {
+    private List<Long> dijkstra(Long startNodeId, Long endNodeId, boolean requireAccessible) {
 
         // Grab the adjacencyList from our map parser
         Map<Long, List<MapParser.Edge>> adjacencyList = mapParser.getAdjacencyList();
@@ -105,6 +106,11 @@ public class MapService {
             if (neighbors == null) continue;
 
             for (MapParser.Edge edge : neighbors) {
+                // Filter out non-accessible edges if accessibility mode is required
+                if (requireAccessible && !edge.isAccessible) {
+                    continue;
+                }
+                
                 double newDistance = currentDistance + edge.distance;
 
                 if (newDistance < distances.getOrDefault(edge.targetNodeId, Double.MAX_VALUE)) {

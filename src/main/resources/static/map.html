@@ -117,6 +117,29 @@
             background: #dcfce7;
             color: #16a34a;
         }
+        input[type="checkbox"] {
+            width: auto;
+            margin-top: 5px;
+        }
+        .form-group-row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .form-group-row label {
+            margin-bottom: 0;
+        }
+        .form-group-row input[type="checkbox"] {
+            margin-top: 0;
+        }
+        .favourite-item {
+            margin: 5px 0;
+        }
+        .favourite-item .route-label {
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -133,8 +156,9 @@
             }
             return null;
         }
-        
-        if (getCookie('authenticated') !== 'true') {
+        // this is our authentication, and it also handles as our way of telling the backend what we should do
+        const userId = getCookie('authentication');
+        if (!userId) {
             window.location.href = '/';
         }
     </script>
@@ -153,6 +177,13 @@
             </div>
 
             <button id="searchBtn" onclick="findRoute()">Find Route</button>
+            
+            <div class="form-group form-group-row">
+                <label for="accessibility-switch">Accessible Mode</label>
+                <input type="checkbox" id="accessibility-switch" onchange="handleAccessibilityChange(this)">
+                <label for="favourite-switch" style="margin-left: 15px;">Favourite</label>
+                <input type="checkbox" id="favourite-switch" onchange="handleFavouriteChange(this)">
+            </div>
         </div>
 
         <div id="status"></div>
@@ -161,6 +192,11 @@
             <div id="loading-overlay" class="loading-overlay" style="display: none;">
                 <div class="spinner-large"></div>
             </div>
+        </div>
+
+        <div>
+            <h2>Previous Favourite Locations</h2>
+            <div id="favourites-list"></div>
         </div>
     </div>
 
@@ -178,12 +214,156 @@
         // Store current route layer so we can remove it later
         let routeLayer = null;
         let markersLayer = null;
+        // Store current route data
+        let currentRouteData = null;
+
+        async function loadFavourites() {
+            const userId = getCookie('authentication');
+            if (!userId) return;
+            
+            const response = await fetch('/api/favourites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: parseInt(userId) })
+            });
+            
+            const data = await response.json();
+            const list = document.getElementById('favourites-list');
+            
+            if (!data.favourites || data.favourites.length === 0) {
+                list.innerHTML = '';
+                return;
+            }
+            
+            list.innerHTML = data.favourites.map((fav, index) => 
+                `<div class="favourite-item" onclick="loadFavouriteRoute('${fav.from}', '${fav.to}')">
+                    ${index + 1}. <span class="route-label">From:</span> ${fav.from} <span class="route-label">To:</span> ${fav.to}
+                </div>`
+            ).join('');
+        }
+
+        // Load a favourite route into the form and find it
+        function loadFavouriteRoute(from, to) {
+            document.getElementById('start').value = from;
+            document.getElementById('destination').value = to;
+            findRoute();
+        }
+
+        // Load user's accessibility setting on page load
+        async function loadAccessibilitySetting() {
+            const userId = getCookie('authentication');
+            if (!userId) return;
+            
+            try {
+                const response = await fetch('/api/getAccessibility', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: parseInt(userId) })
+                });
+                
+                const data = await response.json();
+                if (data.success && data.accessibility) {
+                    document.getElementById('accessibility-switch').checked = true;
+                }
+            } catch (error) {
+                console.error('Error loading accessibility setting:', error);
+            }
+        }
+
+        // Load favourites when page loads
+        loadFavourites();
+        // Load accessibility setting when page loads
+        loadAccessibilitySetting();
+
+        async function handleAccessibilityChange(checkbox) {
+            const isEnabled = checkbox.checked;
+            const userId = getCookie('authentication');
+            
+            if (!userId) {
+                console.error('No userId found in cookie');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/changeAccessibility', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId: parseInt(userId), enabled: isEnabled })
+                });
+                
+                const data = await response.json();
+                if (!data.success) {
+                    console.error('Failed to change accessibility setting');
+                    // Revert checkbox state on error
+                    checkbox.checked = !isEnabled;
+                }
+            } catch (error) {
+                console.error('Error changing accessibility:', error);
+                // Revert checkbox state on error
+                checkbox.checked = !isEnabled;
+            }
+        }
+
+        async function handleFavouriteChange(checkbox) {
+            if (!checkbox.checked) {
+                // If unchecking, just uncheck it (could add delete functionality later)
+                return;
+            }
+
+            const userId = getCookie('authentication');
+            
+            if (!userId) {
+                console.error('No userId found in cookie');
+                checkbox.checked = false;
+                return;
+            }
+
+            if (!currentRouteData || !currentRouteData.original || !currentRouteData.destination) {
+                alert('Please find a route first before favouriting');
+                checkbox.checked = false;
+                return;
+            }
+
+            const starting = currentRouteData.original.address;
+            const destination = currentRouteData.destination.address;
+
+            try {
+                const response = await fetch('/api/favourite', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        userId: parseInt(userId), 
+                        starting: starting,
+                        destination: destination
+                    })
+                });
+                
+                const data = await response.json();
+                if (!data.success) {
+                    console.error('Failed to save favourite route:', data.error);
+                    checkbox.checked = false;
+                } else {
+                    // Reload favourites list after saving
+                    loadFavourites();
+                }
+            } catch (error) {
+                console.error('Error saving favourite route:', error);
+                checkbox.checked = false;
+            }
+        }
 
         async function findRoute() {
             const original = document.getElementById('start').value;
             const destination = document.getElementById('destination').value;
             const statusDiv = document.getElementById('status');
             const btn = document.getElementById('searchBtn');
+            
+            // Clear favourite checkbox when finding a new route
+            document.getElementById('favourite-switch').checked = false;
 
             if (!original || !destination) {
                 statusDiv.className = 'error';
@@ -229,6 +409,13 @@
                     statusDiv.textContent = 'No walking route found between these locations';
                     return;
                 }
+
+                // Save route data with original and destination information
+                currentRouteData = {
+                    route: data.route,
+                    original: data.original,
+                    destination: data.destination
+                };
 
                 // Convert route to Leaflet format so that it can run the map properly [lat, lng]
                 const routeCoords = data.route.map(p => [p.lat, p.lng]);
