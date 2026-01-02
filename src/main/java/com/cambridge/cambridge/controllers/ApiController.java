@@ -306,7 +306,7 @@ public class ApiController {
     }
 
     @PostMapping("/favourites")
-    public ResponseEntity<Map<String, Object>> getFavourites(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> getFavourites(HttpServletRequest request) {
         // Get user_id from cookie
         Integer userId = null;
         Cookie[] cookies = request.getCookies();
@@ -319,20 +319,6 @@ public class ApiController {
                         System.out.println("Invalid user_id in cookie: " + cookie.getValue());
                     }
                     break;
-                }
-            }
-        }
-
-        // Also check request body as fallback
-        if (userId == null) {
-            Object userIdObj = body.get("userId");
-            if (userIdObj instanceof Integer) {
-                userId = (Integer) userIdObj;
-            } else if (userIdObj instanceof String) {
-                try {
-                    userId = Integer.parseInt((String) userIdObj);
-                } catch (NumberFormatException e) {
-                    return ResponseEntity.ok(Map.of("success", false, "error", "Invalid userId format", "favourites", new ArrayList<>()));
                 }
             }
         }
@@ -363,7 +349,7 @@ public class ApiController {
     }
 
     @PostMapping("/getAccessibility")
-    public ResponseEntity<Map<String, Object>> getAccessibility(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> getAccessibility(HttpServletRequest request) {
         // Get user_id from cookie
         Integer userId = null;
         Cookie[] cookies = request.getCookies();
@@ -376,20 +362,6 @@ public class ApiController {
                         System.out.println("Invalid user_id in cookie: " + cookie.getValue());
                     }
                     break;
-                }
-            }
-        }
-
-        // Also check request body as fallback
-        if (userId == null) {
-            Object userIdObj = body.get("userId");
-            if (userIdObj instanceof Integer) {
-                userId = (Integer) userIdObj;
-            } else if (userIdObj instanceof String) {
-                try {
-                    userId = Integer.parseInt((String) userIdObj);
-                } catch (NumberFormatException e) {
-                    return ResponseEntity.ok(Map.of("success", false, "error", "Invalid userId format", "accessibility", false));
                 }
             }
         }
